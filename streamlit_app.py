@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import time
 from datetime import datetime
 
 # Page configuration
@@ -29,12 +30,20 @@ def ensure_backup_dir():
     if not os.path.exists(BACKUP_DIR):
         os.makedirs(BACKUP_DIR)
 
+@st.cache_data(ttl=5)  # Cache for 5 seconds - balances freshness with performance on Streamlit Cloud
 def load_existing_data():
     """Load existing labeled data from CSV"""
     if os.path.exists(CSV_FILE):
         try:
-            return pd.read_csv(CSV_FILE)
-        except:
+            # Read CSV with error handling for concurrent access
+            df = pd.read_csv(CSV_FILE)
+            # Filter out empty rows (rows with all NaN or empty values)
+            df = df.dropna(how='all')
+            # Filter out rows where all values are empty strings
+            df = df[~(df.astype(str).apply(lambda x: x.str.strip().eq('')).all(axis=1))]
+            return df
+        except Exception as e:
+            # If file is locked or corrupted, return empty DataFrame
             return pd.DataFrame(columns=["timestamp", "toy", "balls_code", "toy_code", "location_state"])
     return pd.DataFrame(columns=["timestamp", "toy", "balls_code", "toy_code", "location_state"])
 
@@ -66,8 +75,20 @@ def save_backup(new_row):
 
 def save_data(df):
     """Save DataFrame to CSV and create full backup"""
-    # Save main CSV file
-    df.to_csv(CSV_FILE, index=False)
+    # Filter out empty rows before saving
+    df = df.dropna(how='all')
+    df = df[~(df.astype(str).apply(lambda x: x.str.strip().eq('')).all(axis=1))]
+    
+    # Remove duplicates based on all columns to prevent duplicate entries
+    df = df.drop_duplicates(subset=["timestamp", "toy", "balls_code", "toy_code", "location_state"], keep='last')
+    
+    # Save main CSV file with error handling for concurrent writes
+    try:
+        df.to_csv(CSV_FILE, index=False)
+    except Exception as e:
+        # If write fails, try again after a short delay (handles concurrent access on Streamlit Cloud)
+        time.sleep(0.1)
+        df.to_csv(CSV_FILE, index=False)
     
     # Create timestamped full backup
     ensure_backup_dir()
@@ -88,6 +109,13 @@ def main():
         unsafe_allow_html=True
     )
 
+    # Refresh button to reload data
+    col_refresh, _ = st.columns([1, 10])
+    with col_refresh:
+        if st.button("🔄 Refresh Data", help="Reload data to see latest submissions from all users"):
+            load_existing_data.clear()  # Clear cache to force reload
+            st.rerun()  # Rerun to refresh the page
+    
     # Load existing data
     df = load_existing_data()
     
@@ -163,13 +191,29 @@ def main():
                 except Exception as e:
                     st.warning(f"⚠️ Backup save warning: {str(e)}")
                 
-                # Add to DataFrame
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+                # Reload latest data from CSV to get any concurrent submissions from other users
+                load_existing_data.clear()  # Clear cache first to get fresh data
+                df_latest = load_existing_data()
+                
+                # Check for duplicates (in case same entry was submitted concurrently)
+                # Create a temporary DataFrame with the new row to check for duplicates
+                new_df = pd.DataFrame([new_row])
+                combined = pd.concat([df_latest, new_df], ignore_index=True)
+                
+                # Remove duplicates based on all columns
+                df_updated = combined.drop_duplicates(
+                    subset=["timestamp", "toy", "balls_code", "toy_code", "location_state"], 
+                    keep='last'
+                )
                 
                 # Save to CSV (also creates full backup)
-                save_data(df)
+                save_data(df_updated)
                 
-                st.success(f"✅ Label saved successfully! (Total: {len(df)} labels)")
+                # Clear cache to force reload on next render so all users see the update
+                load_existing_data.clear()
+                
+                st.success(f"✅ Label saved successfully! (Total: {len(df_updated)} labels)")
+                st.rerun()  # Rerun to refresh the page and show updated data from all users
     
     st.markdown("---")
     
