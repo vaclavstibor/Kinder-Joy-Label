@@ -57,27 +57,27 @@ def main():
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            # 1. Toy selection
-            selected_toy = st.selectbox(
-                "Select Toy *",
-                options=[""] + TOYS,
-                help="Select one of the 24 available toys"
-            )
-        
-        with col2:
-            # 2. Balls code
+            # 1. Balls code
             balls_code = st.text_input(
                 "Balls Code *",
                 help="Must be at least 1 character",
                 placeholder="Enter balls code"
             )
         
-        with col3:
-            # 3. Toy code
+        with col2:
+            # 2. Toy code
             toy_code = st.text_input(
                 "Toy Code *",
                 help="Must be at least 1 character",
                 placeholder="Enter toy code"
+            )
+        
+        with col3:
+            # 3. Toy selection
+            selected_toy = st.selectbox(
+                "Select Toy *",
+                options=[""] + TOYS,
+                help="Select one of the 24 available toys"
             )
         
         with col4:
