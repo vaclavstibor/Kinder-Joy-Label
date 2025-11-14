@@ -377,7 +377,8 @@ def main():
                         with st.spinner("Generating 3D visualization..."):
                             pca_fig = plot_pca_3d(pca_data, explained_variance, color_by=color_by_lower, n_clusters=n_clusters)
                             if pca_fig:
-                                st.plotly_chart(pca_fig, width='stretch')
+                                # Safari WebGL fix - use specific config
+                                st.plotly_chart(pca_fig, width="stretch", config={'displayModeBar': False})
                     
                     # PCA Statistics - centered text
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -440,4 +441,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -207,19 +207,21 @@ def plot_pca_3d(pca_data, explained_variance, color_by='toy', n_clusters=None):
                 mode='markers',
                 name=toy,
                 marker=dict(
-                    size=8,
+                    size=6,
                     color=viridis_colors[i],
-                    opacity=0.7
+                    opacity=0.9,
+                    line=dict(width=0)  # Remove marker borders for Safari
                 ),
                 hovertemplate='<b>%{fullData.name}</b><br>PC1: %{x:.2f}<br>PC2: %{y:.2f}<br>PC3: %{z:.2f}<extra></extra>'
             ))
         
         layout_updates = {
             'legend': dict(
-                x=1.02,
-                y=0.02,
-                xanchor='left',
-                yanchor='bottom',
+                x=0.5,
+                y=-0.1,
+                xanchor='center',
+                yanchor='top',
+                orientation='h',
                 bgcolor='rgba(0,0,0,0)',  # Transparent background
                 bordercolor='rgba(0,0,0,0)',  # Transparent border
                 borderwidth=0,
@@ -235,10 +237,9 @@ def plot_pca_3d(pca_data, explained_variance, color_by='toy', n_clusters=None):
             z='PC3',
             color=color_column,
             color_continuous_scale='viridis',
-            hover_data=['toy', 'balls_code', 'toy_code'] if 'balls_code' in pca_data.columns else ['toy'],
-            opacity=0.7
+            hover_data=['toy', 'balls_code', 'toy_code'] if 'balls_code' in pca_data.columns else ['toy']
         )
-        fig.update_traces(marker=dict(size=8))
+        fig.update_traces(marker=dict(size=6, line=dict(width=0)))
         
         # Update layout with colorbar in bottom right
         layout_updates = {
@@ -251,7 +252,7 @@ def plot_pca_3d(pca_data, explained_variance, color_by='toy', n_clusters=None):
             )
         }
     
-    # Update layout - transparent theme
+    # Update layout - transparent theme with Safari WebGL fix
     fig.update_layout(
         scene=dict(
             xaxis_title='',
@@ -259,12 +260,16 @@ def plot_pca_3d(pca_data, explained_variance, color_by='toy', n_clusters=None):
             zaxis_title='',
             xaxis=dict(showbackground=False, showgrid=True, gridcolor='rgba(128, 128, 128, 0.2)'),
             yaxis=dict(showbackground=False, showgrid=True, gridcolor='rgba(128, 128, 128, 0.2)'),
-            zaxis=dict(showbackground=False, showgrid=True, gridcolor='rgba(128, 128, 128, 0.2)')
+            zaxis=dict(showbackground=False, showgrid=True, gridcolor='rgba(128, 128, 128, 0.2)'),
+            camera=dict(
+                eye=dict(x=1.5, y=1.5, z=1.5)  # Fixed camera position for Safari
+            )
         ),
-        height=700,
+        height=500,
         margin=dict(l=0, r=0, b=0, t=0),
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
+        uirevision='constant',  # Prevent UI state reset
         **layout_updates
     )
     
