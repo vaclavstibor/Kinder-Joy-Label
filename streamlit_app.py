@@ -2,16 +2,26 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
-from google.cloud import firestore
-from google.oauth2 import service_account
 import json
+
+# Import Firestore - required for the app to work
+try:
+    from google.cloud import firestore
+    from google.oauth2 import service_account
+    FIRESTORE_AVAILABLE = True
+except ImportError:
+    FIRESTORE_AVAILABLE = False
 
 # Page configuration
 st.set_page_config(
     page_title="Kinder Joy Labeling App",
-    page_icon="🎁",
     layout="wide"
 )
+
+# Check if Firestore is available after page config
+if not FIRESTORE_AVAILABLE:
+    st.error("Firestore packages not installed. Please install google-cloud-firestore and google-auth.")
+    st.stop()
 
 # Toy list (24 toys)
 TOYS = [
@@ -27,6 +37,9 @@ COLLECTION_NAME = "labels"  # Collection name in Firestore - each label is a sep
 
 def get_firestore_client():
     """Initialize Firestore client using Streamlit secrets or service account file"""
+    if not FIRESTORE_AVAILABLE:
+        return None
+    
     try:
         # Check if credentials are in Streamlit secrets
         if 'gcp_service_account' in st.secrets:
@@ -53,7 +66,7 @@ def get_firestore_client():
 
 @st.cache_data(ttl=5)  # Cache for 5 seconds - balances freshness with performance on Streamlit Cloud
 def load_existing_data():
-    """Load existing labeled data from Firestore (each label is a separate document)"""
+    """Load existing labeled data from Firestore"""
     db = get_firestore_client()
     if not db:
         st.error("Firestore is not configured. Please set up your credentials in Streamlit Secrets.")
@@ -89,7 +102,7 @@ def load_existing_data():
         return pd.DataFrame(columns=["timestamp", "toy", "balls_code", "toy_code", "location_state"])
 
 def save_backup(new_row):
-    """Save individual submitted item to Firestore (as a separate document)"""
+    """Save individual submitted item to Firestore"""
     db = get_firestore_client()
     if not db:
         st.error("Firestore is not configured. Please set up your credentials in Streamlit Secrets.")
