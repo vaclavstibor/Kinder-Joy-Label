@@ -321,8 +321,10 @@ def main():
                     if fig:
                         st.plotly_chart(fig, width='stretch')
 
-            # PCA Analysis
-            if len(df) >= 3:
+            # PCA Analysis - manual enable to prevent mobile freeze
+            enable_pca = st.checkbox("Enable PCA Analysis", value=False, help="3D visualizations may be slow on mobile devices")
+            
+            if len(df) >= 3 and enable_pca:
                 with st.spinner("Computing PCA analysis (this may take a moment)..."):
                     # Extract features
                     df_features = extract_code_features(df)
@@ -440,4 +442,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
