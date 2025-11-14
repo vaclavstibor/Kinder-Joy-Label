@@ -43,6 +43,7 @@ TOYS = [
 # Firestore configuration
 COLLECTION_NAME = "labels"  # Collection name in Firestore - each label is a separate document
 
+@st.cache_resource  # Cache the client as a resource (persists across reruns)
 def get_firestore_client():
     """Initialize Firestore client using Streamlit secrets (from secrets.toml locally or Streamlit Cloud secrets)"""
     if not FIRESTORE_AVAILABLE:
@@ -68,7 +69,7 @@ def get_firestore_client():
         return None
     return None
 
-@st.cache_data(ttl=5, show_spinner=False)  # Cache for 5 seconds - balances freshness with performance on Streamlit Cloud
+@st.cache_data(ttl=60, show_spinner=True)  # Increased cache to 60 seconds for better mobile performance
 def load_existing_data():
     """Load existing labeled data from Firestore"""
     db = get_firestore_client()
@@ -166,11 +167,7 @@ def main():
         unsafe_allow_html=True
     )
 
-    
-    # Load existing data (cached, so it's fast)
-    df = load_existing_data()
-    
-    # Main form
+    # Main form - show immediately for better mobile UX
     with st.form("labeling_form", clear_on_submit=True):
         # All inputs in one row
         col1, col2, col3, col4 = st.columns(4)
@@ -258,6 +255,10 @@ def main():
     
     #st.markdown("---")
     
+    # Load existing data (after form, so form shows immediately)
+    with st.spinner("Loading data..."):
+        df = load_existing_data()
+    
     # Display current data
     st.header("Labeled Data")
     
@@ -284,8 +285,8 @@ def main():
         # Show data table
         st.dataframe(df_display, width='stretch', hide_index=True)
         
-        # Summary statistics
-        with st.expander("📈 View Summary Statistics"):
+        # Summary statistics - in collapsed expander
+        with st.expander("📈 View Summary Statistics", expanded=False):
             # Metrics    
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -315,17 +316,19 @@ def main():
             
             if len(df) > 0:
                 st.markdown("<h2 style='text-align: center;'>Toy Distribution</h2>", unsafe_allow_html=True)
-                fig = plot_toy_frequency_analysis(df)
-                if fig:
-                    st.plotly_chart(fig, width='stretch')
+                with st.spinner("Generating chart..."):
+                    fig = plot_toy_frequency_analysis(df)
+                    if fig:
+                        st.plotly_chart(fig, width='stretch')
 
             # PCA Analysis
             if len(df) >= 3:
-                # Extract features
-                df_features = extract_code_features(df)
-                
-                # Perform PCA with 3 components
-                pca, pca_data, explained_variance, feature_names = perform_pca_analysis(df_features, n_components=3)
+                with st.spinner("Computing PCA analysis (this may take a moment)..."):
+                    # Extract features
+                    df_features = extract_code_features(df)
+                    
+                    # Perform PCA with 3 components
+                    pca, pca_data, explained_variance, feature_names = perform_pca_analysis(df_features, n_components=3)
                 
                 if pca is not None and pca_data is not None:
                     # Initialize color_by in session state if not exists
@@ -371,9 +374,10 @@ def main():
                     with col2:
                         # Convert to lowercase for plot function
                         color_by_lower = st.session_state.pca_color_by.lower()
-                        pca_fig = plot_pca_3d(pca_data, explained_variance, color_by=color_by_lower, n_clusters=n_clusters)
-                        if pca_fig:
-                            st.plotly_chart(pca_fig, width='stretch')
+                        with st.spinner("Generating 3D visualization..."):
+                            pca_fig = plot_pca_3d(pca_data, explained_variance, color_by=color_by_lower, n_clusters=n_clusters)
+                            if pca_fig:
+                                st.plotly_chart(pca_fig, width='stretch')
                     
                     # PCA Statistics - centered text
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -407,14 +411,15 @@ def main():
                     #st.subheader("Explained Variance by Component")
                     #variance_fig = plot_pca_variance_explained(explained_variance)
                     #if variance_fig:
-                    #    st.plotly_chart(variance_fig, use_container_width=True)
+                    #    st.plotly_chart(variance_fig, width='stretch')
                     
                     # PCA Loadings
                     st.markdown("<h2 style='text-align: center;'>PCA Feature Loadings</h2>", unsafe_allow_html=True)
                     st.caption("Shows how each feature contributes to the principal components")
-                    loadings_fig = plot_pca_loadings(pca, feature_names, n_components=3)
-                    if loadings_fig:
-                        st.plotly_chart(loadings_fig, width='stretch')
+                    with st.spinner("Generating loadings chart..."):
+                        loadings_fig = plot_pca_loadings(pca, feature_names, n_components=3)
+                        if loadings_fig:
+                            st.plotly_chart(loadings_fig, width='stretch')
                 else:
                     st.warning("Not enough numerical features for PCA analysis. Need at least 2 features.")
             else:
