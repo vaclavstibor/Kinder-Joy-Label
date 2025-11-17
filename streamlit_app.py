@@ -94,12 +94,19 @@ def load_prediction_model(model_path="./model/model.pkl"):
         st.error(f"Failed to load model: {str(e)}")
         return None
 
-@st.cache_data(ttl=3600, show_spinner=True)  # Cache for 1 hour to reduce Firestore reads
+@st.cache_data(show_spinner=True, ttl=None)  # Cache permanently until manual refresh (no TTL)
 def load_existing_data():
     """
     Load existing labeled data from Firestore - optimized to use single document (1 read total)
     Reads from all_labels_in_one/all_labels collection
+    
+    IMPORTANT: This function should only be called ONCE per page load due to caching.
+    Each call that bypasses cache = 1 Firestore read.
     """
+    # Debug: Log when this function is actually called (not from cache)
+    import sys
+    print(f"[DEBUG] load_existing_data() FIRESTORE READ at {datetime.now().strftime('%H:%M:%S')}", file=sys.stderr)
+    
     db = get_firestore_client()
     if not db:
         st.error("Firestore is not configured. Please set up your credentials in Streamlit Secrets.")
@@ -143,6 +150,7 @@ def load_existing_data():
         st.code(traceback.format_exc())
         return pd.DataFrame(columns=["timestamp", "balls_code", "toy_code", "toy", "location_state"])
 
+
 def save_backup(new_row):
     """
     Save individual submitted item to Firestore using single document approach with transaction
@@ -162,6 +170,8 @@ def save_backup(new_row):
         
         @firestore.transactional
         def update_labels(transaction):
+            # This .get() inside transaction = 1 READ operation
+            # This is necessary for transaction consistency
             doc = doc_ref.get(transaction=transaction)
             
             if doc.exists:
@@ -185,6 +195,10 @@ def save_backup(new_row):
             else:
                 return False
         
+        # Debug: Log transaction read
+        import sys
+        print(f"[DEBUG] Transaction read for save at {datetime.now().strftime('%H:%M:%S')}", file=sys.stderr)
+        
         result = update_labels(transaction)
         
         if result:
@@ -199,17 +213,12 @@ def save_backup(new_row):
         return False
 
 def save_data(df):
-    """Save DataFrame to Firestore (each row as separate document)"""
-    # Filter out empty rows before saving
-    df = df.dropna(how='all')
-    df = df[~(df.astype(str).apply(lambda x: x.str.strip().eq('')).all(axis=1))]
-    
-    # Remove duplicates based on all columns to prevent duplicate entries
-    df = df.drop_duplicates(subset=["timestamp", "toy", "balls_code", "toy_code", "location_state"], keep='last')
-    
-    # For Firestore, individual saves are handled in save_backup()
-    # Each label is saved as a separate document to avoid write conflicts
-    # This function is kept for compatibility but doesn't do anything for Firestore
+    """
+    Legacy function - NOT USED in current implementation
+    All saves are handled by save_backup() which writes to all_labels_in_one/all_labels
+    This function is kept for compatibility but does nothing
+    """
+    # This function is not used - all saves go through save_backup() instead
     pass
 
 def main():
@@ -300,18 +309,20 @@ def main():
                     # Save new row to Firestore
                     if save_backup(new_row):
                         status.update(label="Label saved!", state="complete")
-                        # Only clear cache after successful save to reduce unnecessary reads
-                        load_existing_data.clear()
+                        # Note: Cache is NOT cleared - data will update only on manual page refresh
+                        # This minimizes Firestore reads - user controls when to see updates
                     else:
                         status.update(label="Failed to save label", state="error")
                         st.stop()
                 
-                # Reload to get updated count (cache was cleared, so this will fetch fresh data)
-                df_final = load_existing_data()
-                st.success(f"Label saved successfully! (Total: {len(df_final)} labels)")
-                st.rerun()  # Rerun to refresh the page and show updated data from all users
+                st.toast("Label saved successfully! Refresh the page to see updated data.")
+                # Note: No automatic rerun - user must manually refresh page to see updates
     
     # Load existing data (after form, so form shows immediately)
+    # Note: Cache is per-user-session and persists until manual page refresh
+    # Data is fetched ONLY when user reloads the page (no automatic refresh)
+    # IMPORTANT: @st.cache_data ensures this results in 1 Firestore read per page load
+    # Check console/stderr for [DEBUG] messages to see actual Firestore reads
     with st.spinner("Loading data..."):
         df = load_existing_data()
     
